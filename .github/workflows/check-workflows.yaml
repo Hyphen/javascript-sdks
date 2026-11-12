@@ -13,9 +13,8 @@ jobs:
     permissions:
       contents: read
       actions: read
-      # SARIF upload. GitHub grants read-only on fork PRs regardless; permission
-      # values cannot be expressions, so the write grant stays and the zizmor
-      # step below skips Advanced Security on forks.
+      # The SARIF upload needs this permission.
+      # GitHub ignores the write grant on a fork pull request.
       security-events: write
     steps:
       - name: Checkout
@@ -30,6 +29,6 @@ jobs:
       - name: Run zizmor
         uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
-          # Fork PRs cannot upload SARIF (read-only token). Lint with annotations instead.
+          # A fork pull request cannot upload SARIF. It uses annotations.
           advanced-security: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           annotations: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
