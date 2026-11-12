@@ -1,10 +1,10 @@
-![Hyphen AI](https://github.com/Hyphen/nodejs-sdk/raw/main/logo.png)
+![Hyphen AI](https://github.com/Hyphen/javascript-sdks/raw/main/logo.png)
 
-[![tests](https://github.com/Hyphen/nodejs-sdk/actions/workflows/tests.yaml/badge.svg)](https://github.com/Hyphen/nodejs-sdk/actions/workflows/tests.yaml)
-[![codecov](https://codecov.io/gh/Hyphen/nodejs-sdk/graph/badge.svg?token=7SZ2hbuPR3)](https://codecov.io/gh/Hyphen/nodejs-sdk)
+[![tests](https://github.com/Hyphen/javascript-sdks/actions/workflows/tests.yaml/badge.svg)](https://github.com/Hyphen/javascript-sdks/actions/workflows/tests.yaml)
+[![codecov](https://codecov.io/gh/Hyphen/javascript-sdks/graph/badge.svg)](https://codecov.io/gh/Hyphen/javascript-sdks)
 [![npm](https://img.shields.io/npm/v/@hyphen/sdk)](https://www.npmjs.com/package/@hyphen/sdk)
 [![npm](https://img.shields.io/npm/dm/@hyphen/sdk)](https://www.npmjs.com/package/@hyphen/sdk)
-[![license](https://img.shields.io/github/license/Hyphen/nodejs-sdk)](https://github.com/hyphen/nodejs-sdk/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/Hyphen/javascript-sdks)](https://github.com/Hyphen/javascript-sdks/blob/main/LICENSE)
 
 # Hyphen Node.js SDK
 
@@ -1100,7 +1100,7 @@ To test your changes locally you will need to create an account on [Hyphen](http
 
 Then, create a new application in the project. This will give you an application ID.
 
-Once you have created the project, added the toggles, and created your application you can run the tests then create an `.env` file in the root of the project with the following content:
+Once you have created the project, added the toggles, and created your application you can run the tests then create an `.env` file in the `packages/nodejs-sdk` directory with the following content:
 
 
 ```bash

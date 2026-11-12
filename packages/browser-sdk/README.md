@@ -1,10 +1,10 @@
-![Hyphen AI](https://github.com/Hyphen/nodejs-sdk/raw/main/logo.png)
+![Hyphen AI](https://github.com/Hyphen/javascript-sdks/raw/main/logo.png)
 
-[![tests](https://github.com/Hyphen/nodejs-toggle-sdk/actions/workflows/tests.yaml/badge.svg)](https://github.com/Hyphen/nodejs-toggle-sdk/actions/workflows/tests.yaml)
+[![tests](https://github.com/Hyphen/javascript-sdks/actions/workflows/tests.yaml/badge.svg)](https://github.com/Hyphen/javascript-sdks/actions/workflows/tests.yaml)
 [![](https://data.jsdelivr.com/v1/package/npm/@hyphen/browser-sdk/badge)](https://www.jsdelivr.com/package/npm/@hyphen/browser-sdk)
 [![npm](https://img.shields.io/npm/v/@hyphen/browser-sdk)](https://www.npmjs.com/package/@hyphen/browser-sdk)
 [![npm](https://img.shields.io/npm/dm/@hyphen/browser-sdk)](https://www.npmjs.com/package/@hyphen/browser-sdk)
-[![license](https://img.shields.io/github/license/Hyphen/nodejs-toggle-sdk)](https://github.com/hyphen/nodejs-toggle-sdk/blob/main/LICENSE)
+[![license](https://img.shields.io/github/license/Hyphen/javascript-sdks)](https://github.com/Hyphen/javascript-sdks/blob/main/LICENSE)
 
 # Hyphen Browser SDK
 
@@ -266,7 +266,7 @@ Node-style event emitter.
 
 # Contributing
 
-We welcome contributions to the Hyphen Node.js SDK! If you have an idea for a new feature, bug fix, or improvement, please follow the [Contribution](./CONTRIBUTING.md) guidelines and our [Code of Conduct](./CODE_OF_CONDUCT.md).
+We welcome contributions to the Hyphen Node.js SDK! If you have an idea for a new feature, bug fix, or improvement, please follow the [Contribution](../../CONTRIBUTING.md) guidelines and our [Code of Conduct](../../CODE_OF_CONDUCT.md).
 
 # License and Copyright
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

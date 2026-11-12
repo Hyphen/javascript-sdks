@@ -4,6 +4,26 @@
 - When making changes, always run `pnpm test` to verify tests pass
 - When making changes, always maintain 100% code coverage
 
+## Repository structure
+
+This repository is a `pnpm` workspace. Each SDK is a package in the `packages` directory.
+
+- `packages/nodejs-sdk` contains `@hyphen/sdk`, the SDK for Node.js.
+- `packages/browser-sdk` contains `@hyphen/browser-sdk`, the SDK for the browser. Its tests use
+  `@hyphen/sdk`.
+- `packages/react-sdk` contains `@hyphen/react-sdk`, the SDK for React. It uses
+  `@hyphen/browser-sdk`.
+
+Obey these rules for the workspace:
+
+- Run `pnpm install`, `pnpm build`, `pnpm lint`, and `pnpm test` from the root of the repository.
+  Each command runs in all packages.
+- To run a command in one package, use a filter. An example is
+  `pnpm --filter @hyphen/browser-sdk test`.
+- Keep `pnpm-lock.yaml` and `pnpm-workspace.yaml` only in the root of the repository.
+- Use the `workspace:^` protocol when one package uses a different package of this repository.
+- Some packages have an `AGENTS.md` file. Obey that file also when you change that package.
+
 ## Simplified Technical English
 
 Write in ASD-STE100 Simplified Technical English (STE). Get the current issue of the specification
