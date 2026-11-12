@@ -1,0 +1,15 @@
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+blockExoticSubdeps: true
+strictDepBuilds: true
+dangerouslyAllowAllBuilds: false
+trustPolicy: no-downgrade
+
+# Requested transitive versions lack provenance that earlier-published
+# releases of the same package already have. Pin to aged, attested versions.
+overrides:
+  semver@5.7.2: 7.8.5
+  undici-types@6.21.0: 8.12.3
+
+allowBuilds: {}
