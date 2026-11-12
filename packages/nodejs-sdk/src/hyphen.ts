@@ -1,0 +1,208 @@
+import { Hookified, type HookifiedOptions } from "hookified";
+import { Env, type EnvServiceOptions } from "./env-service.js";
+import { Link, type LinkOptions } from "./link.js";
+import { NetInfo, type NetInfoOptions } from "./net-info.js";
+import { Toggle, type ToggleOptions } from "./toggle.js";
+
+export type HyphenOptions = {
+	/**
+	 * The public API key to use for the Hyphen service.
+	 * This is used for public endpoints that do not require authentication.
+	 */
+	publicApiKey?: string;
+	/**
+	 * The API key to use for the Hyphen service.
+	 * This is used for authenticated endpoints that require an API key.
+	 */
+	apiKey?: string;
+	/**
+	 * Options for the Toggle service.
+	 * Excludes `publicApiKey` as it's provided at the top level.
+	 * @see ToggleOptions
+	 * @default {Toggle}
+	 */
+	toggle?: Omit<ToggleOptions, "publicApiKey">;
+	/**
+	 * Options for the NetInfo service.
+	 * Excludes `apiKey` as it's provided at the top level.
+	 * @see NetInfoOptions
+	 * @default {NetInfo}
+	 */
+	netInfo?: Omit<NetInfoOptions, "apiKey">;
+	/**
+	 * Options for the Link service.
+	 * Excludes `apiKey` as it's provided at the top level.
+	 * @see LinkOptions
+	 * @default {Link}
+	 */
+	link?: Omit<LinkOptions, "apiKey">;
+	/**
+	 * Options for the ENV service.
+	 * Excludes `apiKey` as it's provided at the top level.
+	 * @see EnvServiceOptions
+	 * @default {Env}
+	 */
+	env?: Omit<EnvServiceOptions, "apiKey">;
+} & HookifiedOptions;
+
+export class Hyphen extends Hookified {
+	private readonly _env: Env;
+	private readonly _netInfo: NetInfo;
+	private readonly _toggle: Toggle;
+	private readonly _link: Link;
+
+	private _publicApiKey?: string;
+	private _apiKey?: string;
+
+	constructor(options?: HyphenOptions) {
+		super(options);
+
+		const toggleOptions: ToggleOptions = options?.toggle ?? {};
+		const netInfoOptions: NetInfoOptions = options?.netInfo ?? {};
+		const linkOptions: LinkOptions = options?.link ?? {};
+		const envOptions: EnvServiceOptions = { ...options?.env };
+
+		if (options?.publicApiKey) {
+			this._publicApiKey = options.publicApiKey;
+			toggleOptions.publicApiKey = options.publicApiKey;
+		}
+
+		if (options?.apiKey) {
+			this._apiKey = options.apiKey;
+			netInfoOptions.apiKey = options.apiKey;
+			linkOptions.apiKey = options.apiKey;
+			envOptions.apiKey = options.apiKey;
+		}
+
+		this._env = new Env(envOptions);
+
+		this._env.on("error", (message, ...args) =>
+			this.emit("error", message, ...args),
+		);
+
+		this._env.on("info", (message, ...args) =>
+			this.emit("info", message, ...args),
+		);
+
+		this._env.on("warn", (message, ...args) =>
+			this.emit("warn", message, ...args),
+		);
+
+		this._netInfo = new NetInfo(netInfoOptions);
+		// Set error, info, warn emitters for netInfo
+
+		this._netInfo.on("error", (message, ...args) =>
+			this.emit("error", message, ...args),
+		);
+
+		this._netInfo.on("info", (message, ...args) =>
+			this.emit("info", message, ...args),
+		);
+
+		this._netInfo.on("warn", (message, ...args) =>
+			this.emit("warn", message, ...args),
+		);
+
+		this._toggle = new Toggle(toggleOptions);
+		// Set error, info, warn emitters for toggle
+
+		this._toggle.on("error", (message, ...args) =>
+			this.emit("error", message, ...args),
+		);
+
+		this._toggle.on("info", (message, ...args) =>
+			this.emit("info", message, ...args),
+		);
+
+		this._toggle.on("warn", (message, ...args) =>
+			this.emit("warn", message, ...args),
+		);
+
+		this._link = new Link(linkOptions);
+		// Set error, info, warn emitters for link
+
+		this._link.on("error", (message, ...args) =>
+			this.emit("error", message, ...args),
+		);
+
+		this._link.on("info", (message, ...args) =>
+			this.emit("info", message, ...args),
+		);
+
+		this._link.on("warn", (message, ...args) =>
+			this.emit("warn", message, ...args),
+		);
+	}
+
+	/**
+	 * Get the ENV service instance.
+	 * @returns {Env} The ENV service instance.
+	 */
+	public get env(): Env {
+		return this._env;
+	}
+
+	/**
+	 * Get the NetInfo service instance.
+	 * @returns {NetInfo} The NetInfo service instance.
+	 */
+	public get netInfo(): NetInfo {
+		return this._netInfo;
+	}
+
+	/**
+	 * Get the Toggle service instance.
+	 * @returns {Toggle} The Toggle service instance.
+	 */
+	public get toggle(): Toggle {
+		return this._toggle;
+	}
+
+	/**
+	 * Get the Link service instance.
+	 * @returns {Link} The Link service instance.
+	 */
+	public get link(): Link {
+		return this._link;
+	}
+
+	/**
+	 * Get the public API key for the Hyphen service.
+	 * This is used for public endpoints that do not require authentication.
+	 * @returns {string | undefined} The public API key.
+	 */
+	public get publicApiKey(): string | undefined {
+		return this._publicApiKey;
+	}
+
+	/**
+	 * Set the public API key for the Hyphen service. If set, this will also update the underlying services.
+	 * This is used for public endpoints that do not require authentication such as the Toggle service.
+	 * @param {string | undefined} value - The public API key to set.
+	 */
+	public set publicApiKey(value: string | undefined) {
+		this._publicApiKey = value;
+		this._toggle.publicApiKey = value;
+	}
+
+	/**
+	 * Get the API key for the Hyphen service.
+	 * This is used for authenticated endpoints that require an API key such as the ENV, NetInfo, and Link services.
+	 * @returns {string | undefined} The API key.
+	 */
+	public get apiKey(): string | undefined {
+		return this._apiKey;
+	}
+
+	/**
+	 * Set the API key for the Hyphen service. If set, this will also update the underlying services.
+	 * This is used for authenticated endpoints that require an API key such as the ENV, NetInfo, and Link services.
+	 * @param {string | undefined} value - The API key to set.
+	 */
+	public set apiKey(value: string | undefined) {
+		this._apiKey = value;
+		this._env.apiKey = value;
+		this._netInfo.apiKey = value;
+		this._link.apiKey = value;
+	}
+}
