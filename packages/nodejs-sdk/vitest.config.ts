@@ -6,7 +6,8 @@ export default defineConfig({
 			concurrent: false, // run tests in each file sequentially
 		},
 		coverage: {
-			reporter: ['text', 'json', 'lcov'],
+			// The lcov paths start at the repository root, so that Codecov finds each file.
+			reporter: ['text', 'json', ['lcov', { projectRoot: '../..' }]],
 			exclude: [
 				'dist/**',
 				'src/index.ts',

@@ -5,7 +5,8 @@ export default defineConfig({
 		environment: 'happy-dom',
 		setupFiles: ['./test/setup.ts'],
 		coverage: {
-			reporter: ['text', 'json', 'lcov'],
+			// The lcov paths start at the repository root, so that Codecov finds each file.
+			reporter: ['text', 'json', ['lcov', { projectRoot: '../..' }]],
 			exclude: [
 				'dist/**',
 				'vitest.config.ts',

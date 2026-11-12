@@ -23,7 +23,7 @@
     "test": "pnpm lint && vitest run --coverage",
     "test:ci": "biome check --error-on-warnings && vitest run --coverage",
     "build": "tsdown",
-		"clean": "rimraf ./dist node_modules coverage",
+    "clean": "rimraf ./dist node_modules coverage",
     "prepublishOnly": "pnpm build"
   },
   "keywords": [
@@ -38,12 +38,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Hyphen/react-sdk.git"
+    "url": "git+https://github.com/Hyphen/javascript-sdks.git",
+    "directory": "packages/react-sdk"
   },
   "engines": {
     "node": ">=22.12.0"
   },
-  "packageManager": "pnpm@12.17.0+sha512.b8d223ebec04b580a89ed206daa71d1bccb6a1ee1d52efa95cc3b0db75271561df8f0d8e2c43add39c5ec08018af7a8a95108e7090f95a29f88727b7a40fd53d",
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",
     "@faker-js/faker": "^10.6.0",
@@ -66,9 +66,13 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@hyphen/browser-sdk": "^1.1.6"
+    "@hyphen/browser-sdk": "workspace:^"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"
+  },
+  "homepage": "https://github.com/Hyphen/javascript-sdks/tree/main/packages/react-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Hyphen/javascript-sdks/issues"
   }
 }
