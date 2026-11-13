@@ -1106,7 +1106,7 @@ Once you have created the project, added the toggles, and created your applicati
 ```bash
 HYPHEN_PUBLIC_API_KEY=your_public_api_key
 HYPHEN_API_KEY=your_api_key
-HYPHEN_APPLICATION_ID=your_project_id
+HYPHEN_APPLICATION_ID=your_application_id
 HYPHEN_LINK_DOMAIN=your_link_domain
 HYPHEN_ORGANIZATION_ID=your_organization_id
 ```
