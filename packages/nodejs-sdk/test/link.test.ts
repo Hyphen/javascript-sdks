@@ -1,0 +1,760 @@
+import process from "node:process";
+import { faker } from "@faker-js/faker";
+import { describe, expect, test } from "vitest";
+import { type CreateQrCodeOptions, Link, QrSize } from "../src/link.js";
+
+const apiKey: string = process.env.HYPHEN_API_KEY ?? "test-api-key";
+const organizationId: string =
+	process.env.HYPHEN_ORGANIZATION_ID ?? "test-organization-id";
+const linkDomain: string = process.env.HYPHEN_LINK_DOMAIN ?? "test.domain.com";
+const tags: string[] = ["sdk-test", "unit-test"];
+const longUrl = [
+	"https://hyphen.ai",
+	"https://hyphen.ai/env",
+	"https://hyphen.ai/link",
+	"https://hyphen.ai/toggle",
+	"https://hyphen.ai/net-info",
+];
+const testTimeout = 30_000;
+
+// biome-ignore lint/suspicious/noExportsInTest: this is used across tests
+export function getRandomLongUrl(): string {
+	return longUrl[Math.floor(Math.random() * longUrl.length)];
+}
+
+/**
+ * Retry a live API call with a backoff. The link API is eventually
+ * consistent, so operations that run immediately after a write (creating a
+ * QR code or reading, updating, or deleting a code right after it was
+ * created) can transiently fail with a 404 until the write is visible to the
+ * read path. Wrapping those calls keeps transient failures from flaking the
+ * suite. Callers can also throw from `fn` when a result is incomplete (for
+ * example a list that does not include a just-created item yet) to poll
+ * until it is.
+ */
+async function retry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+	let lastError: unknown;
+	for (let attempt = 1; attempt <= attempts; attempt++) {
+		try {
+			return await fn();
+		} catch (error) {
+			lastError = error;
+			if (attempt < attempts) {
+				await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+			}
+		}
+	}
+
+	throw lastError;
+}
+
+/**
+ * Best-effort removal of a short code created by a test. Cleanup is not the
+ * behavior under test (the delete tests assert deletion explicitly), so a
+ * cleanup failure logs a warning instead of failing the test.
+ */
+async function cleanupShortCode(link: Link, id: string): Promise<void> {
+	try {
+		await retry(() => link.deleteShortCode(id));
+	} catch {
+		console.warn(`Cleanup failed for ${id}`);
+	}
+}
+
+describe("Link", () => {
+	test("should create a Link instance with default URIs", () => {
+		const link = new Link({ organizationId, apiKey });
+		expect(link.uris).toEqual([
+			"https://api.hyphen.ai/api/organizations/{organizationId}/link/codes/",
+		]);
+		expect(link.organizationId).toBe(organizationId);
+	});
+
+	test("should create a Link instance with custom URIs", () => {
+		const customUris = ["https://custom.api/hyphen/link/codes/"];
+		const link = new Link({ uris: customUris, organizationId, apiKey });
+		expect(link.uris).toEqual(customUris);
+	});
+
+	test("should set and get organization ID", () => {
+		const link = new Link({ organizationId, apiKey });
+		expect(link.organizationId).toBe(organizationId);
+		link.organizationId = "new-org";
+		expect(link.organizationId).toBe("new-org");
+	});
+
+	test("should set and get URIs", () => {
+		const link = new Link({ organizationId, apiKey });
+		const newUris = ["https://new.api/hyphen/link/codes/"];
+		link.uris = newUris;
+		expect(link.uris).toEqual(newUris);
+	});
+
+	test("should set and get API key", () => {
+		const link = new Link({ organizationId, apiKey });
+		expect(link.apiKey).toBe(apiKey);
+		const newApiKey = "new-api-key";
+		link.apiKey = newApiKey;
+		expect(link.apiKey).toBe(newApiKey);
+	});
+
+	test('should throw an error if API key starts with "public_"', () => {
+		const link = new Link({ organizationId, apiKey });
+		expect(() => {
+			link.setApiKey("public_test-api-key");
+		}).toThrow('API key cannot start with "public_"');
+	});
+
+	test("should get the uri based on organization ID", () => {
+		const link = new Link({ organizationId, apiKey });
+		const uri = link.getUri(organizationId);
+		expect(uri).toBe(
+			`https://api.hyphen.ai/api/organizations/${organizationId}/link/codes`,
+		);
+	});
+
+	test("should handle if uri doesnt have forward slash and code is added", () => {
+		const link = new Link({ organizationId, apiKey });
+		const code = "code_1234567890abcdef";
+
+		const uri = link.getUri(organizationId, code);
+		expect(uri).toBe(
+			`https://api.hyphen.ai/api/organizations/${organizationId}/link/codes/${code}`,
+		);
+
+		link.uris = [
+			"https://api.hyphen.ai/api/organizations/{organizationId}/link/codes",
+		];
+		const uriWithoutSlash = link.getUri(organizationId, code);
+		expect(uriWithoutSlash).toBe(
+			`https://api.hyphen.ai/api/organizations/${organizationId}/link/codes/${code}`,
+		);
+	});
+});
+
+describe("Link Create", () => {
+	test(
+		"should create a short code with valid parameters",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const title = faker.string.alpha(10);
+			const options = { tags, title };
+
+			const response = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(response).toBeDefined();
+			expect(response.id).toBeDefined();
+
+			if (response.id) {
+				await cleanupShortCode(link, response.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on create a short code with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		const longUrl = getRandomLongUrl();
+		const domain = linkDomain;
+		const options = { tags };
+
+		link.organizationId = undefined; // Clear organization ID to force an error
+		await expect(
+			link.createShortCode(longUrl, domain, options),
+		).rejects.toThrow();
+	});
+});
+
+describe("Link Get", () => {
+	test(
+		"should get a list of short codes including tags and title",
+		async () => {
+			// Create a link instance
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const title = faker.string.alpha(10) as string;
+			const options = { tags, title };
+
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+			expect(createResponse.title).toBe(title);
+			expect(createResponse.tags).toEqual(tags);
+
+			// Poll until the just-created code is visible in the list, since the
+			// list can lag behind the create.
+			const response = await retry(async () => {
+				const result = await link.getShortCodes(title, tags);
+				if (result.total === 0) {
+					throw new Error(`Short code "${title}" is not visible in the list`);
+				}
+
+				return result;
+			});
+
+			expect(response).toBeDefined();
+			expect(response.total).toBeGreaterThan(0);
+			expect(response.pageNum).toBe(1);
+			expect(response.pageSize).toBe(100);
+
+			// Delete the created short code
+			if (createResponse.id) {
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test(
+		"should get short codes without a title or tag filter",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const response = await retry(() => link.getShortCodes("", [], 1, 10));
+			expect(response).toBeDefined();
+			expect(response.pageNum).toBe(1);
+			expect(response.pageSize).toBe(10);
+		},
+		testTimeout,
+	);
+
+	test("should throw on get short codes with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		await expect(link.getShortCodes("invalid-title")).rejects.toThrow();
+	});
+
+	test(
+		"should create a short code and get it by code",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.code).toBeDefined();
+			expect(createResponse.long_url).toBe(longUrl);
+			expect(createResponse.domain).toBe(domain);
+			expect(createResponse.tags).toEqual(options.tags);
+
+			// Retrieve the short code by ID
+			if (createResponse.id) {
+				const getResponse = await retry(() =>
+					link.getShortCode(createResponse.id),
+				);
+				expect(getResponse).toEqual(createResponse);
+			}
+
+			if (createResponse.id) {
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on get if no organization ID is set", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+
+		await expect(link.getShortCode(fakeCodeId)).rejects.toThrow();
+	});
+});
+
+describe("Link Delete", () => {
+	test(
+		"should create and delete a short code",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const deleteResponse = await retry(() =>
+					link.deleteShortCode(createResponse.id),
+				);
+				expect(deleteResponse).toBe(true);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should delete a short code with invalid organization Id", async () => {
+		const link = new Link({ organizationId, apiKey });
+		const fakeCodeId = "code_1234567890abcdef";
+
+		link.organizationId = undefined; // Clear organization ID to force an error
+		await expect(link.deleteShortCode(fakeCodeId)).rejects.toThrow();
+	});
+});
+
+describe("Link Update", () => {
+	test("should throw on update short code with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		const fakeCodeId = "code_1234567890abcdef";
+		const options = { title: "Updated Title", tags: ["updated-tag"] };
+
+		link.organizationId = undefined; // Clear organization ID to force an error
+		await expect(link.updateShortCode(fakeCodeId, options)).rejects.toThrow();
+	});
+
+	test(
+		"create a short code and update it",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const title = faker.string.alpha(10);
+			const options = { tags, title };
+
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const updateOptions = {
+					title: "Updated Title",
+					tags: ["updated-tag"],
+					long_url: "https://updated.url",
+				};
+				const updateResponse = await retry(() =>
+					link.updateShortCode(createResponse.id, updateOptions),
+				);
+
+				expect(updateResponse).toBeDefined();
+				expect(updateResponse.title).toBe("Updated Title");
+				expect(updateResponse.tags).toEqual(["updated-tag"]);
+				expect(updateResponse.long_url).toBe("https://updated.url");
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+});
+
+describe("Link Tags", () => {
+	test(
+		"should get tags for the organization",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const tags = await retry(() => link.getTags());
+			expect(tags).toBeDefined();
+			expect(Array.isArray(tags)).toBe(true);
+		},
+		testTimeout,
+	);
+
+	test(
+		"should throw on get tags with invalid organization ID",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			link.organizationId = undefined; // Clear organization ID to force an error
+			await expect(link.getTags()).rejects.toThrow();
+		},
+		testTimeout,
+	);
+});
+
+describe("Link Stats", () => {
+	test(
+		"should get code stats for a short code",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+
+			// Use a short code owned by this test. Picking a random code from the
+			// organization is flaky: concurrent test runs (such as the CI matrix)
+			// create and delete their own temporary codes in the same
+			// organization, so a randomly picked code can be deleted by another
+			// run before the stats call resolves, which returns a 404.
+			const createResponse = await retry(() =>
+				link.createShortCode(getRandomLongUrl(), linkDomain, { tags }),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			const codeStats = await retry(() =>
+				link.getCodeStats(
+					createResponse.id,
+					new Date(Date.now() - 24 * 60 * 60 * 1000),
+					new Date(),
+				),
+			);
+
+			expect(codeStats).toBeDefined();
+			expect(codeStats.clicks).toBeDefined();
+			expect(codeStats.referrals).toBeDefined();
+			expect(codeStats.browsers).toBeDefined();
+			expect(codeStats.devices).toBeDefined();
+			expect(codeStats.locations).toBeDefined();
+
+			if (createResponse.id) {
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on get code stats with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+		await expect(
+			link.getCodeStats(fakeCodeId, new Date(), new Date()),
+		).rejects.toThrow();
+	});
+});
+
+describe("Link QR Code", () => {
+	test(
+		"should create a QR code for a short code",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const qrCodeResponse = await retry(() =>
+					link.createQrCode(createResponse.id),
+				);
+				expect(qrCodeResponse).toBeDefined();
+				expect(qrCodeResponse.qrCode).toBeDefined();
+				expect(qrCodeResponse.qrLink).toBeDefined();
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	// The QR create endpoint consumes multipart/form-data, so the custom options
+	// (title/backgroundColor/color/size) are sent as form fields. This exercises
+	// that contract end-to-end against the live API. See issue #133.
+	test(
+		"should create a QR code with custom options",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const qrCodeOptions: CreateQrCodeOptions = {
+					title: "Custom QR Code",
+					backgroundColor: "#ffffff",
+					color: "#000000",
+					size: QrSize.MEDIUM,
+				};
+				const qrCodeResponse = await retry(() =>
+					link.createQrCode(createResponse.id, qrCodeOptions),
+				);
+				expect(qrCodeResponse).toBeDefined();
+				expect(qrCodeResponse.qrCode).toBeDefined();
+				expect(qrCodeResponse.qrLink).toBeDefined();
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	// Coverage for the custom-options path of createQrCode without hitting the
+	// live API. The network layer is stubbed so the multipart body is built and
+	// the options-defined branches of the request are exercised.
+	test("should build a multipart body when creating a QR code with options", async () => {
+		const link = new Link({ organizationId, apiKey });
+		const qrCodeOptions: CreateQrCodeOptions = {
+			title: "Custom QR Code",
+			backgroundColor: "#ffffff",
+			color: "#000000",
+			size: QrSize.MEDIUM,
+			logo: "bG9nbw==",
+		};
+
+		let capturedBody: FormData | undefined;
+		let capturedHeaders: Record<string, string> | undefined;
+		// biome-ignore lint/suspicious/noExplicitAny: minimal stub of the post method
+		(link as any).post = async (_url: string, data: FormData, config: any) => {
+			capturedBody = data;
+			capturedHeaders = config?.headers;
+			return {
+				data: {
+					id: "qr_test",
+					qrCode: Buffer.from("qr").toString("base64"),
+					qrLink: "https://hyphen.ai/qr",
+				},
+				status: 201,
+				statusText: "Created",
+				headers: {},
+				config: undefined,
+				request: undefined,
+			};
+		};
+
+		const response = await link.createQrCode("code_test", qrCodeOptions);
+
+		expect(capturedBody).toBeInstanceOf(FormData);
+		expect(capturedBody?.get("title")).toBe("Custom QR Code");
+		expect(capturedBody?.get("backgroundColor")).toBe("#ffffff");
+		expect(capturedBody?.get("color")).toBe("#000000");
+		expect(capturedBody?.get("size")).toBe("medium");
+		const logo = capturedBody?.get("logo");
+		expect(logo).toBeInstanceOf(Blob);
+		expect(await (logo as Blob).text()).toBe("logo");
+		// The JSON content-type must be removed so the multipart boundary is set
+		// automatically by the underlying fetch call.
+		expect(capturedHeaders?.["content-type"]).toBeUndefined();
+		expect(response.qrCode).toBeDefined();
+		expect(response.qrCodeBytes).toBeInstanceOf(Uint8Array);
+		expect(Buffer.from(response.qrCodeBytes).toString()).toBe("qr");
+		expect(response.qrLink).toBe("https://hyphen.ai/qr");
+	});
+
+	// Coverage for the no-options path: the API rejects an empty multipart body,
+	// so an empty JSON payload is sent instead (keeping the JSON content-type).
+	test("should send an empty JSON body when creating a QR code without options", async () => {
+		const link = new Link({ organizationId, apiKey });
+
+		let capturedBody: unknown;
+		let capturedHeaders: Record<string, string> | undefined;
+		// biome-ignore lint/suspicious/noExplicitAny: minimal stub of the post method
+		(link as any).post = async (_url: string, data: unknown, config: any) => {
+			capturedBody = data;
+			capturedHeaders = config?.headers;
+			return {
+				data: {
+					id: "qr_test",
+					qrCode: Buffer.from("qr").toString("base64"),
+					qrLink: "https://hyphen.ai/qr",
+				},
+				status: 201,
+				statusText: "Created",
+				headers: {},
+				config: undefined,
+				request: undefined,
+			};
+		};
+
+		await link.createQrCode("code_test");
+
+		expect(capturedBody).toEqual({});
+		expect(capturedBody).not.toBeInstanceOf(FormData);
+		expect(capturedHeaders?.["content-type"]).toBe("application/json");
+	});
+
+	test("should throw on create QR code with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+		await expect(link.createQrCode(fakeCodeId)).rejects.toThrow();
+	});
+
+	test(
+		"should create multiple QR codes for a short code and get them",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const qrCode1 = await retry(() => link.createQrCode(createResponse.id));
+				expect(qrCode1).toBeDefined();
+				expect(qrCode1.qrCode).toBeDefined();
+				expect(qrCode1.qrLink).toBeDefined();
+
+				const qrCode2 = await retry(() => link.createQrCode(createResponse.id));
+				expect(qrCode2).toBeDefined();
+				expect(qrCode2.qrCode).toBeDefined();
+				expect(qrCode2.qrLink).toBeDefined();
+
+				// Poll until both QR codes are visible in the list.
+				const qrCodes = await retry(async () => {
+					const result = await link.getQrCodes(createResponse.id);
+					if (result.data.length < 2) {
+						throw new Error("QR codes are not visible in the list");
+					}
+
+					return result;
+				});
+				expect(qrCodes).toBeDefined();
+				expect(qrCodes.data.length).toBeGreaterThanOrEqual(2);
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on get QR codes with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+		await expect(link.getQrCodes(fakeCodeId)).rejects.toThrow();
+	});
+
+	test(
+		"should get QR codes for a short code with pagination",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				await retry(() => link.createQrCode(createResponse.id));
+				await retry(() => link.createQrCode(createResponse.id));
+
+				// Poll until both QR codes are visible in the list.
+				const qrCodes = await retry(async () => {
+					const result = await link.getQrCodes(createResponse.id, 1, 10);
+					if (result.data.length < 2) {
+						throw new Error("QR codes are not visible in the list");
+					}
+
+					return result;
+				});
+				expect(qrCodes).toBeDefined();
+				expect(qrCodes.data.length).toBeGreaterThanOrEqual(2);
+				expect(qrCodes.pageNum).toBe(1);
+				expect(qrCodes.pageSize).toBe(10);
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test(
+		"should create a QR code and then get it by ID",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const qrCodeResponse = await retry(() =>
+					link.createQrCode(createResponse.id),
+				);
+				expect(qrCodeResponse).toBeDefined();
+				expect(qrCodeResponse.qrCode).toBeDefined();
+				expect(qrCodeResponse.qrLink).toBeDefined();
+
+				const qrCodeById = await retry(() =>
+					link.getQrCode(createResponse.id, qrCodeResponse.id),
+				);
+				expect(qrCodeById.id).toEqual(qrCodeResponse.id);
+
+				await cleanupShortCode(link, createResponse.id);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on get QR code by ID with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+		const fakeQrCodeId = "qr_code_1234567890abcdef";
+		await expect(link.getQrCode(fakeCodeId, fakeQrCodeId)).rejects.toThrow();
+	});
+
+	test(
+		"should delete a QR code by ID",
+		async () => {
+			const link = new Link({ organizationId, apiKey });
+			const longUrl = getRandomLongUrl();
+			const domain = linkDomain;
+			const options = { tags };
+			const createResponse = await retry(() =>
+				link.createShortCode(longUrl, domain, options),
+			);
+
+			expect(createResponse).toBeDefined();
+			expect(createResponse.id).toBeDefined();
+
+			if (createResponse.id) {
+				const qrCodeResponse = await retry(() =>
+					link.createQrCode(createResponse.id),
+				);
+				expect(qrCodeResponse).toBeDefined();
+				expect(qrCodeResponse.qrCode).toBeDefined();
+				expect(qrCodeResponse.qrLink).toBeDefined();
+
+				const deleteQrCodeResponse = await retry(() =>
+					link.deleteQrCode(createResponse.id, qrCodeResponse.id),
+				);
+				expect(deleteQrCodeResponse).toBe(true);
+
+				const deleteShortCodeResponse = await retry(() =>
+					link.deleteShortCode(createResponse.id),
+				);
+				expect(deleteShortCodeResponse).toBe(true);
+			}
+		},
+		testTimeout,
+	);
+
+	test("should throw on delete QR code with invalid parameters", async () => {
+		const link = new Link({ organizationId, apiKey });
+		link.organizationId = undefined; // Clear organization ID to force an error
+		const fakeCodeId = "code_1234567890abcdef";
+		const fakeQrCodeId = "qr_code_1234567890abcdef";
+		await expect(link.deleteQrCode(fakeCodeId, fakeQrCodeId)).rejects.toThrow();
+	});
+});

@@ -1,0 +1,123 @@
+name: release
+
+on:
+  workflow_dispatch:
+  release:
+    types: [released]
+
+permissions:
+  contents: read
+
+jobs:
+  aikido-gate:
+    runs-on: ubuntu-latest
+    # A stalled scan stops after 15 minutes.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+    - name: Install Socket Firewall
+      uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      with:
+        mode: firewall-free
+        firewall-version: "1.15.6"
+
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+
+    - name: Install Aikido CI client
+      # zizmor: ignore[adhoc-packages] pinned Aikido CI client for the release gate
+      run: sfw npm install --global @aikidosec/ci-api-client@1.0.17
+
+    - name: Run Aikido release scan
+      # The scan fails when Aikido reports a new finding at severity LOW or above.
+      # The API key comes from the Aikido CI settings.
+      # The key cannot publish a package.
+      env:
+        REPO_NAME: ${{ github.event.repository.name }}
+        AIKIDO_CLIENT_API_KEY: ${{ secrets.AIKIDO_CLIENT_API_KEY }}
+      run: >
+        aikido-api-client scan-release
+        "$REPO_NAME" "$GITHUB_SHA"
+        --apikey "$AIKIDO_CLIENT_API_KEY"
+        --fail-on-sast-scan --fail-on-iac-scan --fail-on-secrets-scan
+        --minimum-severity-level LOW
+
+  build:
+    needs: [aikido-gate]
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC lets this job stage the packages.
+      id-token: write
+
+    env:
+      HYPHEN_PUBLIC_API_KEY: ${{ secrets.HYPHEN_PUBLIC_API_KEY }}
+      HYPHEN_API_KEY: ${{ secrets.HYPHEN_API_KEY }}
+      HYPHEN_APPLICATION_ID: ${{ secrets.HYPHEN_APPLICATION_ID }}
+      HYPHEN_ORGANIZATION_ID: ${{ secrets.HYPHEN_ORGANIZATION_ID }}
+      HYPHEN_LINK_DOMAIN: test.h4n.link
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Socket Firewall
+      uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      with:
+        mode: firewall-free
+        firewall-version: "1.15.6"
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+    - name: Use Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        package-manager-cache: false
+
+    - name: Install Dependencies
+      run: sfw pnpm install --frozen-lockfile
+
+    - name: Build
+      run: pnpm build
+
+    - name: Testing
+      run: pnpm test:ci
+
+    - name: Pack
+      # This step packs each package that has a version that is not on npm.
+      # It does not pack a package when npm has the version.
+      run: |
+        mkdir -p packed
+        for dir in packages/*/; do
+          name=$(node -p "require('./${dir}package.json').name")
+          version=$(node -p "require('./${dir}package.json').version")
+          if [ -n "$(npm view "${name}@${version}" version 2>/dev/null)" ]; then
+            echo "Skip ${name}@${version}. npm has this version."
+          else
+            echo "Pack ${name}@${version}."
+            pnpm --dir "$dir" pack --pack-destination "$PWD/packed"
+          fi
+        done
+        ls -la packed
+
+    - name: Stage publish
+      # OIDC stages each tarball. This job does not use an npm token.
+      # --no-git-checks is required. The release checkout is a detached tag.
+      run: |
+        shopt -s nullglob
+        tarballs=(./packed/*.tgz)
+        if [ "${#tarballs[@]}" -eq 0 ]; then
+          echo "No package has a new version."
+          exit 0
+        fi
+        for tarball in "${tarballs[@]}"; do
+          pnpm stage publish "$tarball" --access public --provenance --no-git-checks
+        done

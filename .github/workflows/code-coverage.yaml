@@ -1,0 +1,60 @@
+name: code-coverage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  HYPHEN_PUBLIC_API_KEY: ${{ secrets.HYPHEN_PUBLIC_API_KEY }}
+  HYPHEN_API_KEY: ${{ secrets.HYPHEN_API_KEY }}
+  HYPHEN_APPLICATION_ID: ${{ secrets.HYPHEN_APPLICATION_ID }}
+  HYPHEN_ORGANIZATION_ID: ${{ secrets.HYPHEN_ORGANIZATION_ID }}
+  HYPHEN_LINK_DOMAIN: test.h4n.link
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Install Socket Firewall
+      uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f # v1.3.2
+      with:
+        mode: firewall-free
+        firewall-version: "1.15.6"
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+    - name: Use Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        cache: 'pnpm'
+
+    - name: Install Dependencies
+      run: sfw pnpm install --frozen-lockfile
+
+    - name: Build
+      run: pnpm build
+
+    - name: Testing
+      run: pnpm test:ci
+
+    - name: Code Coverage
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: Hyphen/javascript-sdks
+        # Each package writes one lcov file. The paths in each file start at the repository root.
+        files: ./packages/nodejs-sdk/coverage/lcov.info,./packages/browser-sdk/coverage/lcov.info,./packages/react-sdk/coverage/lcov.info
