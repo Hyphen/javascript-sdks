@@ -29,6 +29,7 @@ const testVariableNames = [
 	"NAMED_ONLY",
 	"NEW_VALUE",
 	"ONLY_NAMED",
+	"ORDINARY_NAME",
 	"QUOTED",
 	"SETTER_KEY",
 	"SHARED",
@@ -285,6 +286,90 @@ describe("Env", () => {
 		await service.load();
 
 		expect(process.env.SHARED).toBe("remote");
+	});
+
+	describe("reserved names", () => {
+		test.each([
+			"BASH_ENV",
+			"COMSPEC",
+			"DYLD_INSERT_LIBRARIES",
+			"HYPHEN_API_KEY",
+			"LD_PRELOAD",
+			"NODE_COMPILE_CACHE",
+			"NODE_EXTRA_CA_CERTS",
+			"NODE_OPTIONS",
+			"NODE_PATH",
+			"NODE_REPL_EXTERNAL_MODULE",
+			"NODE_TLS_REJECT_UNAUTHORIZED",
+			"OPENSSL_CONF",
+			"OPENSSL_ENGINES",
+			"OPENSSL_MODULES",
+			"PATH",
+			"PATHEXT",
+			"SSL_CERT_DIR",
+			"SSL_CERT_FILE",
+			"ld_library_path",
+			"node_options",
+			"Path",
+		])("does not write the reserved name %s to process.env", async (name) => {
+			const before = process.env[name];
+			const service = createService({ decryptionKey });
+			vi.spyOn(service.log, "warn").mockImplementation(() => undefined);
+			vi.spyOn(service, "get").mockResolvedValue(
+				mockEnvResponse(`${name}=remote\nORDINARY_NAME=written\n`),
+			);
+
+			await expect(service.load()).resolves.toEqual({
+				[name]: "remote",
+				ORDINARY_NAME: "written",
+			});
+			expect(process.env[name]).toBe(before);
+			expect(process.env.ORDINARY_NAME).toBe("written");
+
+			await service.load("default", { override: false });
+			expect(process.env[name]).toBe(before);
+		});
+
+		test.each(["LDAP_URL", "NODE_CONFIG", "NODE_ENV", "PATHNAME"])(
+			"writes the name %s, which is not reserved",
+			async (name) => {
+				const service = createService({ decryptionKey });
+				const warnListener = vi.fn();
+				service.on("warn", warnListener);
+				vi.spyOn(service, "get").mockResolvedValue(
+					mockEnvResponse(`${name}=remote\n`),
+				);
+
+				await service.load();
+
+				expect(process.env[name]).toBe("remote");
+				expect(warnListener).not.toHaveBeenCalled();
+			},
+		);
+
+		test("reports each skipped name and no value", async () => {
+			const service = createService({ decryptionKey });
+			const logSpy = vi
+				.spyOn(service.log, "warn")
+				.mockImplementation(() => undefined);
+			const warnListener = vi.fn();
+			service.on("warn", warnListener);
+			vi.spyOn(service, "get").mockResolvedValue(
+				mockEnvResponse(
+					"NODE_OPTIONS=--first-secret\nORDINARY_NAME=written\nLD_PRELOAD=second-secret\n",
+				),
+			);
+
+			await service.load();
+
+			expect(warnListener).toHaveBeenCalledOnce();
+			const [message] = warnListener.mock.calls[0];
+			expect(message).toContain("NODE_OPTIONS");
+			expect(message).toContain("LD_PRELOAD");
+			expect(message).not.toContain("ORDINARY_NAME");
+			expect(message).not.toContain("secret");
+			expect(logSpy).toHaveBeenCalledExactlyOnceWith(message);
+		});
 	});
 
 	test("uses an explicit key without requiring a project or requesting the key store", async () => {

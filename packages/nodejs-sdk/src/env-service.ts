@@ -31,6 +31,33 @@ const environmentNamePattern = /^[a-z0-9_-]+$/;
 const base64UrlPattern = /^[A-Za-z0-9_-]+={0,2}$/;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
+/**
+ * `load` does not write these names to `process.env`. The Node.js runtime,
+ * OpenSSL, and the command shell read them to load code, to find programs and
+ * modules, or to trust certificates. `HYPHEN_API_KEY` is the SDK credential.
+ */
+const reservedNames = new Set([
+	"BASH_ENV",
+	"COMSPEC",
+	"HYPHEN_API_KEY",
+	"NODE_COMPILE_CACHE",
+	"NODE_EXTRA_CA_CERTS",
+	"NODE_OPTIONS",
+	"NODE_PATH",
+	"NODE_REPL_EXTERNAL_MODULE",
+	"NODE_TLS_REJECT_UNAUTHORIZED",
+	"OPENSSL_CONF",
+	"OPENSSL_ENGINES",
+	"OPENSSL_MODULES",
+	"PATH",
+	"PATHEXT",
+	"SSL_CERT_DIR",
+	"SSL_CERT_FILE",
+]);
+
+/** The dynamic loader reads each name that starts with one of these prefixes. */
+const reservedNamePrefixes = ["DYLD_", "LD_"];
+
 class SafeEnvError extends Error {}
 
 export class Env extends BaseService {
@@ -103,10 +130,19 @@ export class Env extends BaseService {
 			);
 		}
 
+		const override = options?.override ?? true;
+		const skippedNames: string[] = [];
 		for (const [name, value] of entries) {
-			if ((options?.override ?? true) || process.env[name] === undefined) {
+			if (isReservedName(name)) {
+				skippedNames.push(name);
+			} else if (override || process.env[name] === undefined) {
 				process.env[name] = value;
 			}
+		}
+		if (skippedNames.length > 0) {
+			this.warn(
+				`Hyphen ENV did not add these reserved names to process.env: ${skippedNames.join(", ")}.`,
+			);
 		}
 
 		return variables;
@@ -202,6 +238,15 @@ function normalizeEnvironmentName(environment: string): string {
 		);
 	}
 	return name;
+}
+
+function isReservedName(name: string): boolean {
+	// Windows ignores the case of a variable name.
+	const upperName = name.toUpperCase();
+	return (
+		reservedNames.has(upperName) ||
+		reservedNamePrefixes.some((prefix) => upperName.startsWith(prefix))
+	);
 }
 
 function validateKey(key: {
