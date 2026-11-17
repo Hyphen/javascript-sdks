@@ -56,7 +56,7 @@ for arg in "$@"; do
       case "${arg%%.*}" in pip | pipx | uv | poetry | pdm) blocked "$arg" ;; esac
       break
       ;;
-    -W | -X)
+    -W | -X | --check-hash-based-pycs)
       prev=""
       continue
       ;;
@@ -68,7 +68,7 @@ for arg in "$@"; do
       break
       ;;
     -m | -[!-]*m) prev="-m" ;;
-    -W | -X) prev="$arg" ;;
+    -W | -X | --check-hash-based-pycs) prev="$arg" ;;
     -c | --) break ;;
     -*) prev="" ;;
     *) break ;;
