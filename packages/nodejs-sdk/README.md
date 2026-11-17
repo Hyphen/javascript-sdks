@@ -634,6 +634,28 @@ await hyphen.env.load('production', {
 });
 ```
 
+The service does not add a reserved name to `process.env`. Node.js, OpenSSL, the
+dynamic loader, and the command shell read these names to load code, to find
+programs and modules, or to trust certificates. The comparison ignores the case
+of the name. These names are reserved:
+
+- `NODE_OPTIONS`, `NODE_PATH`, `NODE_REPL_EXTERNAL_MODULE`, and
+  `NODE_COMPILE_CACHE`
+- `NODE_EXTRA_CA_CERTS` and `NODE_TLS_REJECT_UNAUTHORIZED`
+- `OPENSSL_CONF`, `OPENSSL_ENGINES`, `OPENSSL_MODULES`, `SSL_CERT_DIR`, and
+  `SSL_CERT_FILE`
+- `PATH`, `PATHEXT`, `COMSPEC`, and `BASH_ENV`
+- Each name that starts with `LD_` or `DYLD_`
+- `HYPHEN_API_KEY`
+
+The service sends one `warn` event that lists the names that it did not add. The
+event does not contain the values. The returned object contains the reserved
+names and their values. Other names, for example `NODE_ENV`, are not reserved.
+
+The list contains only the names that these programs read. A different
+program can read a different name. Give write access to your ENV data only to
+persons who can change the code of the application.
+
 The service reads missing configuration from `HYPHEN_API_KEY`,
 `HYPHEN_ORGANIZATION_ID`, `HYPHEN_PROJECT_ID`, and
 `HYPHEN_APPLICATION_ID`, with `HYPHEN_APP_ID` supported as a compatibility
