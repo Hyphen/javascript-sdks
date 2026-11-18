@@ -181,8 +181,8 @@ importers:
   packages/browser-sdk:
     dependencies:
       hookified:
-        specifier: ^3.0.3
-        version: 3.0.3
+        specifier: ^3.1.0
+        version: 3.1.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.6.6
@@ -221,8 +221,8 @@ importers:
         specifier: ^2.5.0
         version: 2.5.0
       hookified:
-        specifier: ^3.0.4
-        version: 3.0.4
+        specifier: ^3.1.0
+        version: 3.1.0
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -1454,12 +1454,8 @@ packages:
   hookified@2.2.0:
     resolution: {integrity: sha512-p/LgFzRN5FeoD3DLS6bkUapeye6E4SI6yJs6KetENd18S+FBthqYq2amJUWpt5z0EQwwHemidjY5OqJGEKm5uA==}
 
-  hookified@3.0.3:
-    resolution: {integrity: sha512-ZcbRytYgERoKtosiaXolUIPIWMgUCrSiWQEzFZ0kc8etD/LPgpy4/KOrtssFdK7ZXlTTyb4cob2veqj7osv8yA==}
-    engines: {node: '>=22.18.0'}
-
-  hookified@3.0.4:
-    resolution: {integrity: sha512-Uos6DSO6BKv4DeR1C22UosRpeUaaoQgEQ+eDCyoJRll2OGzGpZc708vL7orIvqrYLo6zhVV+pkwO9zKVCsq3PQ==}
+  hookified@3.1.0:
+    resolution: {integrity: sha512-G2jPVpzwIiV7pcYcg62ngNvY+y0iCkKmuJIaQpomFdvtY89UiSvWuPiNo1AalSr1t2op1cdz21ZThZc3DSbmvA==}
     engines: {node: '>=22.18.0'}
 
   hosted-git-info@2.8.9:
@@ -3041,9 +3037,7 @@ snapshots:
 
   hookified@2.2.0: {}
 
-  hookified@3.0.3: {}
-
-  hookified@3.0.4: {}
+  hookified@3.1.0: {}
 
   hosted-git-info@2.8.9: {}
 
